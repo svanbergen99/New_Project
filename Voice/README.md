@@ -25,4 +25,4 @@ Voice input → Voice Collector → beveiliging/codering → Voice Opslag → ve
 - Opslag bewaart de definitieve data.
 - Collectors halen data op, controleren die en beveiligen/coderen die vóór opslag.
 - Geen secrets, tokens of wachtwoorden in deze repository opslaan.
-- Voice-onderdelen blijven in deze map; Tekst blijft apart in `../Tekst/`.
+- Voice-onderdelen blijven in deze map; Text blijft apart in `../Text/`.
