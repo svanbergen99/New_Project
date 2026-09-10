@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "model_id": "kcdee-base-v0",
+  "display_name": "KC-Dee Base",
+  "architecture": "transformer-decoder",
+  "format": "gguf",
+  "quantization": "TBD",
+  "context_length": 8192,
+  "weights": {
+    "filename": "kcdee.gguf",
+    "sha256": "REPLACE_WITH_VERIFIED_SHA256",
+    "size_bytes": 0
+  },
+  "tokenizer": {
+    "owned_by_kcd": false,
+    "name": "TBD",
+    "sha256": "TBD"
+  },
+  "training": {
+    "from_random_weights": false,
+    "base_model": "TBD",
+    "dataset_manifest": "TBD",
+    "dataset_rights_verified": false,
+    "training_code_commit": "TBD",
+    "training_seed": 0,
+    "hardware_profile": "TBD"
+  },
+  "license": {
+    "weights_license": "TBD",
+    "commercial_use_checked": false,
+    "redistribution_checked": false
+  },
+  "provenance": {
+    "created_by": "KCD",
+    "source": "TBD",
+    "created_at": "TBD"
+  },
+  "sovereign_class": "local-runtime-only",
+  "notes": "Change sovereign_class to kcd-foundation only after tokenizer, dataset and model are owned/controlled and training started from random weights."
+}
