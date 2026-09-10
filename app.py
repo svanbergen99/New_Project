@@ -12,8 +12,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="KCD Visual Lab", version="1.0")
+app = FastAPI(title="KCD Visual Lab", version="1.1")
 
+VOICE_ENGINE_URL = os.getenv(
+    "KCD_VOICE_ENGINE_URL",
+    "https://web-production-b004a.up.railway.app",
+).rstrip("/")
 ELEVENLABS_API_KEY = (
     os.getenv("ELEVENLABS_API_KEY", "").strip()
     or os.getenv("Elevenlabs", "").strip()
@@ -27,11 +31,11 @@ KCD_ASSET_ORIGIN = os.getenv(
 INTRO_SCRIPT = (
     "Hé! Welkom bij KCD. Ik ben KC-Dee, Kay Cee Dee. "
     "Ik ben een tijdje op vakantie geweest. Zon, zee, even opladen... je kent het wel. "
-    "Maar eerlijk? Helemaal stilzitten is niet echt mijn ding. "
+    "Maar helemaal stilzitten is niet echt mijn ding. "
     "Tussen de palmbomen door heb ik vooral nagedacht over hoe ik KCD slimmer, sneller en fijner kan maken. "
     "Betere antwoorden. Slimmere tools. Meer overzicht. En vooral: hoe ik jullie straks nog beter kan helpen. "
     "Achter de schermen wordt gewerkt aan tekst, voice, video, verkeer, roosters en nog veel meer. "
-    "Op mijn nieuwe desktop staat nu misschien nog niet zoveel... maar geef ons nog heel even. "
+    "Op mijn nieuwe desktop staat nu misschien nog niet zoveel, maar geef ons nog heel even. "
     "De koffers zijn bijna gepakt, mijn zonnebril kan bijna af... en ik ben bijna terug van vakantie. "
     "Tot heel snel bij KCD!"
 )
@@ -60,9 +64,23 @@ def _request(url: str, *, method: str = "GET", headers: dict[str, str] | None = 
         raise RuntimeError("Upstream service is niet bereikbaar.") from error
 
 
-def _build_intro_audio() -> bytes:
+def _voice_via_kcd_engine() -> bytes:
+    status, data, headers = _request(
+        f"{VOICE_ENGINE_URL}/api/tts",
+        method="POST",
+        headers={"content-type": "application/json", "accept": "audio/mpeg"},
+        body=json.dumps({"text": INTRO_SCRIPT}).encode("utf-8"),
+        timeout=110,
+    )
+    content_type = headers.get("Content-Type", headers.get("content-type", ""))
+    if status < 400 and data and "audio" in content_type.lower():
+        return data
+    raise RuntimeError(f"KCD Voice Engine gaf HTTP {status}.")
+
+
+def _voice_direct_fallback() -> bytes:
     if not ELEVENLABS_API_KEY:
-        raise RuntimeError("ElevenLabs is niet geconfigureerd.")
+        raise RuntimeError("Geen directe voice fallback geconfigureerd.")
     voice_id = urllib.parse.quote(ELEVENLABS_VOICE_ID)
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
     payload = json.dumps({
@@ -84,11 +102,21 @@ def _build_intro_audio() -> bytes:
             "content-type": "application/json",
         },
         body=payload,
-        timeout=100,
+        timeout=110,
     )
-    if status >= 400 or not data:
-        raise RuntimeError(f"Voice provider gaf HTTP {status}.")
-    return data
+    if status < 400 and data:
+        return data
+    raise RuntimeError(f"Directe voice provider gaf HTTP {status}.")
+
+
+def _build_intro_audio() -> bytes:
+    try:
+        return _voice_via_kcd_engine()
+    except RuntimeError as first:
+        try:
+            return _voice_direct_fallback()
+        except RuntimeError as second:
+            raise RuntimeError(f"Voice niet beschikbaar: {first} {second}") from second
 
 
 @app.get("/")
@@ -101,8 +129,10 @@ def health():
     return {
         "status": "ok",
         "service": "kcd-visual-lab",
-        "voiceConfigured": bool(ELEVENLABS_API_KEY),
-        "voiceModel": "eleven_multilingual_v2",
+        "version": "1.1",
+        "voiceSource": "KCD Voice Engine",
+        "voiceEngineUrlConfigured": bool(VOICE_ENGINE_URL),
+        "directVoiceFallback": bool(ELEVENLABS_API_KEY),
         "assetProxy": True,
     }
 
