@@ -1,0 +1,41 @@
+services:
+  core:
+    build: ./core
+    environment:
+      KCD_MODEL_ENDPOINT: http://llama:8080
+      KCD_MODEL_NAME: kcdee-local
+      KCD_MODEL_FILE: /models/kcdee.gguf
+      KCD_MODEL_SHA256: ${KCD_MODEL_SHA256:-}
+      KCD_ALLOWED_MODEL_HOSTS: llama
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - llama
+    networks:
+      - sovereign
+
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command:
+      - -m
+      - /models/kcdee.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -c
+      - "8192"
+      - -n
+      - "1024"
+    volumes:
+      - ./models:/models:ro
+    expose:
+      - "8080"
+    networks:
+      - sovereign
+
+networks:
+  sovereign:
+    internal: true
