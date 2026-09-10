@@ -1,72 +1,159 @@
 # Visual Engine — Video Pipeline Architecture
 
-Dit document legt de vaste route vast voor de video-verwerkingscyclus binnen de Visual Engine.
+Dit document legt de vaste route, vaste servicenames en live-koppelingen vast voor de video-verwerkingscyclus binnen de Visual Engine.
 
-## Rollen
+## Canonieke namen
 
-- **1 — Engine**: maakt, analyseert en verbetert de video.
-- **2 — Beheer**: controleert/beheert de output van de Engine.
-- **3 — Collega**: laatste controle-/beoordelingsstap voordat de video teruggaat naar ReCheck/Engine.
-- **Storage X**: permanente opslag van de videoversie die bij de betreffende stap hoort.
-- **Redis**: job-queue/verkeersregelaar tussen twee stappen. Redis bevat geen grote videobestanden.
-- **Postgres**: centrale administratie en ReCheck-status. Postgres bewaart metadata, versies, fouten, status en storage-referenties; niet de videobestanden zelf.
+Deze namen zijn vanaf nu leidend en moeten in Railway, configuratie en code exact dezelfde betekenis houden:
 
-## Vaste route
+- **Engine1** — eigenaar van de video-job; analyseert, maakt en verbetert video's.
+- **Video1** — video-processing stap van Engine1.
+- **Storage1** — permanente opslag na Video1.
+- **Redis1** — queue/router van Storage1 naar Beheer.
+- **Beheer** — tweede controle-/verwerkingsstap.
+- **Video2** — video-processing stap van Beheer.
+- **Storage2** — permanente opslag na Video2.
+- **Redis2** — queue/router van Storage2 naar Collega.
+- **Collega** — derde controle-/verwerkingsstap.
+- **Video3** — video-processing stap van Collega.
+- **Storage3** — permanente opslag na Video3.
+- **Redis3** — queue/router van Storage3 naar ReCheck.
+- **Postgres1** — centrale administratie, historie en ReCheck-status.
 
-```text
-1 ENGINE
-  |
-  v
-STORAGE 1
-  |
-  v
-REDIS: Job 1 -> Job 2
-  |
-  v
-2 BEHEER
-  |
-  v
-STORAGE 2
-  |
-  v
-REDIS: Job 2 -> Job 3
-  |
-  v
-3 COLLEGA
-  |
-  v
-STORAGE 3
-  |
-  v
-REDIS: Job 3 -> ReCheck
-  |
-  v
-RECHECK / POSTGRES
-  |
-  +-- fout / verbetering nodig --> terug naar 1 ENGINE
-  |
-  +-- goedgekeurd --> definitieve route / eindopslag van 1
-```
+Gebruik geen alternatieve namen zoals `Job1`, `Job2`, `Queue-A`, `Recheck DB` of vergelijkbare varianten voor deze onderdelen.
 
-De cyclus kan meerdere keren worden uitgevoerd:
+## Vaste hoofdroute
 
 ```text
-1 -> X -> 2 -> X -> 3 -> X -> 1 -> X -> 2 -> X -> 3 -> X -> 1 ...
+Engine1
+  |
+  v
+Video1
+  |
+  v
+Storage1
+  |
+  v
+Redis1
+  |
+  v
+Beheer
+  |
+  v
+Video2
+  |
+  v
+Storage2
+  |
+  v
+Redis2
+  |
+  v
+Collega
+  |
+  v
+Video3
+  |
+  v
+Storage3
+  |
+  v
+Redis3
+  |
+  v
+Postgres1 / ReCheck
 ```
 
-Hierbij staat `X` voor permanente video-opslag.
+## ReCheck / teruglus
 
-## Belangrijkste regel
+Na Video3 wordt de laatste versie eerst in Storage3 opgeslagen. Redis3 publiceert daarna dat deze versie klaarstaat voor ReCheck.
 
-Een volgende Redis-job mag pas worden gepubliceerd nadat de nieuwe videoversie succesvol in de bijbehorende Storage is opgeslagen.
+Postgres1 bewaart de ReCheck-uitkomst.
+
+```text
+Storage3
+  |
+  v
+Redis3
+  |
+  v
+Postgres1 / ReCheck
+  |
+  +-- FOUT --> Engine1 --> Video1 --> Storage1 --> Redis1 --> Beheer --> ...
+  |
+  +-- GOED --> definitieve registratie/eindopslag van Engine1
+```
+
+Bij een fout blijft dezelfde `video_id` bestaan, maar Engine1 maakt een nieuwe `version` en de volledige route begint opnieuw.
+
+## Live routing map
+
+Wanneer de omgeving live wordt gekoppeld, moeten de verbindingen altijd volgens deze tabel worden gezet:
+
+| Van | Naar | Doel |
+|---|---|---|
+| Engine1 | Video1 | nieuwe of gecorrigeerde video laten verwerken |
+| Video1 | Storage1 | output van stap 1 permanent opslaan |
+| Storage1 | Redis1 | pas na succesvolle opslag een job publiceren |
+| Redis1 | Beheer | versie aanbieden aan Beheer |
+| Beheer | Video2 | verwerking/controle van stap 2 |
+| Video2 | Storage2 | output van stap 2 permanent opslaan |
+| Storage2 | Redis2 | pas na succesvolle opslag een job publiceren |
+| Redis2 | Collega | versie aanbieden aan Collega |
+| Collega | Video3 | verwerking/controle van stap 3 |
+| Video3 | Storage3 | output van stap 3 permanent opslaan |
+| Storage3 | Redis3 | pas na succesvolle opslag een ReCheck-job publiceren |
+| Redis3 | Postgres1/ReCheck | laatste versie laten beoordelen/registreren |
+| Postgres1/ReCheck | Engine1 | alleen bij fout/correctie nodig |
+| Postgres1/ReCheck | Engine1 eindarchief | bij goedkeuring definitieve versie registreren |
+
+## Vaste configuratienamen voor live koppelingen
+
+Gebruik in code/configuratie vaste environment-variable namen zodat Railway-links later niet door elkaar kunnen raken:
+
+```text
+ENGINE1_URL
+VIDEO1_URL
+STORAGE1_BUCKET
+REDIS1_URL
+
+BEHEER_URL
+VIDEO2_URL
+STORAGE2_BUCKET
+REDIS2_URL
+
+COLLEGA_URL
+VIDEO3_URL
+STORAGE3_BUCKET
+REDIS3_URL
+
+POSTGRES1_URL
+```
+
+Als Railway voor een component zelf een standaard variable levert (bijvoorbeeld `REDIS_URL` of `DATABASE_URL`), mag die intern worden gebruikt, maar binnen de Visual Engine-configuratie wordt hij naar de bovenstaande vaste naam gemapt.
+
+Voorbeeld:
+
+```text
+Railway Redis service 1 REDIS_URL -> VE config REDIS1_URL
+Railway Redis service 2 REDIS_URL -> VE config REDIS2_URL
+Railway Redis service 3 REDIS_URL -> VE config REDIS3_URL
+Railway Postgres DATABASE_URL     -> VE config POSTGRES1_URL
+```
+
+Daarmee is uit iedere variable direct af te leiden bij welk pipeline-onderdeel hij hoort.
+
+## Belangrijkste opslagregel
+
+Een volgende Redis-job mag pas worden gepubliceerd nadat de bijbehorende videoversie succesvol in de juiste Storage staat.
 
 Dus altijd:
 
 ```text
-verwerking
--> video opslaan
--> Postgres-versie/status registreren
--> Redis-job publiceren
+verwerken
+-> video opslaan in StorageN
+-> versie/status in Postgres1 registreren
+-> job naar RedisN publiceren
 -> volgende stap
 ```
 
@@ -74,55 +161,62 @@ Niet andersom.
 
 ## Wat staat waar?
 
-### Storage
+### Storage1, Storage2 en Storage3
 
-Storage bevat de echte videobestanden, bijvoorbeeld:
+De Storage-services bevatten de daadwerkelijke videobestanden. Redis en Postgres bevatten geen grote videobestanden.
+
+Iedere versie moet minimaal gekoppeld blijven aan:
 
 ```text
-video_847/
-  original/
-  engine/
-    v001.mp4
-    v004.mp4
-  beheer/
-    v002.mp4
-    v005.mp4
-  collega/
-    v003.mp4
-    v006.mp4
-  final/
-    final.mp4
+video_id
+job_id
+version
+created_by
+storage_name
+storage_path
+created_at
 ```
 
-De definitieve/centrale video-opslag hoort uiteindelijk bij **Engine 1**.
+De definitieve/centrale video-opslag hoort uiteindelijk bij Engine1.
 
-### Redis
+### Redis1, Redis2 en Redis3
 
-Redis transporteert alleen kleine jobberichten, bijvoorbeeld:
+Redis bevat alleen kleine jobberichten. Iedere Redis heeft één vaste richting:
+
+```text
+Redis1 = Storage1 -> Beheer
+Redis2 = Storage2 -> Collega
+Redis3 = Storage3 -> Postgres1/ReCheck
+```
+
+Voorbeeld jobbericht:
 
 ```json
 {
   "video_id": "847",
+  "job_id": "ve-847",
   "version": 4,
-  "from_stage": 1,
-  "to_stage": 2,
-  "storage_path": "video_847/engine/v004.mp4"
+  "from": "Storage1",
+  "to": "Beheer",
+  "storage_path": "video_847/v004.mp4"
 }
 ```
 
-Redis is tijdelijk transport en niet de bron van waarheid.
+Redis is transport en nooit de bron van waarheid.
 
-### Postgres
+### Postgres1
 
-Postgres is de centrale bron van waarheid voor de administratie, bijvoorbeeld:
+Postgres1 is de centrale bron van waarheid voor administratie en historie. Het bewaart onder andere:
 
 ```text
 video_id
+job_id
 current_version
 current_stage
 status
+storage_name
 storage_path
-created_by_stage
+created_by
 feedback
 error_code
 recheck_count
@@ -131,54 +225,30 @@ created_at
 updated_at
 ```
 
-Postgres moet daardoor altijd kunnen beantwoorden:
+Postgres1 moet altijd kunnen beantwoorden:
 
 - Welke video is dit?
 - Welke versie is de nieuwste?
-- In welke stap zit hij nu?
-- Waar staat het videobestand?
+- Waar staat die versie?
+- Welke stap heeft hem gemaakt?
 - Welke fouten zijn gevonden?
 - Hoe vaak is hij opnieuw door de cyclus gegaan?
-- Welke versie is uiteindelijk goedgekeurd?
-
-## ReCheck-regel
-
-Na stap 3 wordt de laatste opgeslagen versie uit Storage 3 via `Redis: Job 3 -> ReCheck` aangeboden aan ReCheck.
-
-ReCheck registreert de beoordeling in Postgres.
-
-- **Fout gevonden**: video gaat terug naar Engine 1 voor analyse en verbetering. Engine 1 maakt een nieuwe versie en de volledige cyclus start opnieuw.
-- **Goedgekeurd**: de goedgekeurde versie wordt als definitieve versie in/voor de opslag van Engine 1 geregistreerd.
+- Welke versie is definitief goedgekeurd?
 
 ## Eigenaarschap
 
-**Engine 1 blijft eigenaar van de video-job en het uiteindelijke archief.**
+**Engine1 blijft eigenaar van de video-job en het uiteindelijke archief.**
 
-Beheer en Collega zijn stappen binnen de beoordelingscyclus. Zij mogen nieuwe versies, beoordeling en feedback toevoegen, maar de video-job blijft gekoppeld aan dezelfde `video_id`.
-
-## Identiteit van een job
-
-Iedere video krijgt vanaf het begin een vaste identiteit:
-
-```text
-video_id
-job_id
-version
-origin
-current_stage
-status
-storage_path
-```
-
-Een nieuwe correctieronde krijgt een nieuwe `version`, maar behoudt dezelfde `video_id`.
+Beheer en Collega zijn stappen binnen dezelfde cyclus. Een correctieronde krijgt een nieuwe `version`, maar behoudt dezelfde `video_id` en `job_id`.
 
 ## Samenvatting
 
 ```text
-STORAGE = videobestanden
-POSTGRES = hoofdadministratie / historie / ReCheck-status
-REDIS = wachtrij en transport tussen stappen
-ENGINE 1 = eigenaar en eindarchief
+Engine1   = eigenaar / analyse / verbetering / eindarchief
+Video1-3  = video-processing per stap
+Storage1-3 = permanente videoversies
+Redis1-3  = vaste doorgeefroutes tussen de stappen
+Postgres1 = hoofdadministratie / historie / ReCheck
 ```
 
-Deze route is de standaardarchitectuur voor de Visual Engine totdat bewust een nieuwe versie van dit ontwerp wordt vastgesteld.
+Deze namen, route en configuratie-mapping zijn de vaste standaard voor de Visual Engine en moeten bij live deployment als leidraad worden gebruikt voor alle service-links.
