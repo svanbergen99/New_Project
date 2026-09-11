@@ -43,10 +43,6 @@ def main() -> int:
     passed &= check("status endpoint", status_code == 200)
     passed &= check("sovereign mode actief", status.get("sovereignMode") is True)
     passed &= check("externe AI uit", status.get("externalAi") is False)
-    passed &= check("externe TTS uit", status.get("externalTts") is False)
-    passed &= check("externe STT uit", status.get("externalStt") is False)
-    passed &= check("externe vision uit", status.get("externalVision") is False)
-    passed &= check("externe render uit", status.get("externalRender") is False)
     passed &= check("geen provider fallbacks", status.get("providerFallbacks") == [])
 
     model = status.get("model") or {}

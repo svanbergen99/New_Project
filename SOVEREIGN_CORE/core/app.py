@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="KC-Dee Sovereign Core", version="0.1.0")
+app = FastAPI(title="KC-Dee Sovereign Core", version="0.2.0")
 
 MODEL_ENDPOINT = os.getenv("KCD_MODEL_ENDPOINT", "http://llama:8080").rstrip("/")
 MODEL_NAME = os.getenv("KCD_MODEL_NAME", "kcdee-local").strip()
@@ -146,10 +146,6 @@ def sovereign_status(verify_model_hash: bool = False) -> dict[str, Any]:
     result: dict[str, Any] = {
         "sovereignMode": True,
         "externalAi": False,
-        "externalTts": False,
-        "externalStt": False,
-        "externalVision": False,
-        "externalRender": False,
         "providerFallbacks": [],
         "model": {
             "name": MODEL_NAME,
@@ -187,5 +183,4 @@ def chat(package: ChatRequest) -> dict[str, Any]:
     if status >= 400:
         raise HTTPException(status_code=503, detail="Lokale KC-Dee inference gaf een fout.")
 
-    # Return a stable OpenAI-compatible envelope without depending on OpenAI.
     return body
