@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "model_id": "qwen3-1.7b-base",
+  "display_name": "Qwen3-1.7B-Base",
+  "architecture": "transformer-decoder",
+  "source_format": "huggingface-safetensors",
+  "runtime_format": "gguf",
+  "runtime_quantization": "Q4_K_M",
+  "context_length": 4096,
+  "source_model": {
+    "publisher": "Qwen",
+    "repository": "Qwen/Qwen3-1.7B-Base",
+    "local_archive_name": "Qwen3-1.7B-Base.zip",
+    "expected_files": [
+      "config.json",
+      "generation_config.json",
+      "merges.txt",
+      "model.safetensors",
+      "tokenizer.json",
+      "tokenizer_config.json",
+      "vocab.json"
+    ]
+  },
+  "runtime": {
+    "engine": "llama.cpp",
+    "model_filename": "qwen3-1.7b-base-q4_k_m.gguf",
+    "server_path": "/opt/kcdee/models/Qwen3-1.7B-Base-Runtime/qwen3-1.7b-base-q4_k_m.gguf",
+    "sha256": "TO_BE_FILLED_AFTER_SERVER_CONVERSION"
+  },
+  "training": {
+    "from_random_weights": false,
+    "base_model": "Qwen/Qwen3-1.7B-Base",
+    "dataset_manifest": "TBD",
+    "dataset_rights_verified": false,
+    "training_code_commit": "TBD",
+    "training_seed": 0,
+    "hardware_profile": "STRATO-8GB-RAM"
+  },
+  "license": {
+    "weights_license": "VERIFY_UPSTREAM_BEFORE_REDISTRIBUTION",
+    "commercial_use_checked": false,
+    "redistribution_checked": false
+  },
+  "provenance": {
+    "created_by": "KCD",
+    "source": "Qwen/Qwen3-1.7B-Base",
+    "created_at": "2026-09-12"
+  },
+  "sovereign_class": "local-runtime-only",
+  "notes": "Keep original safetensors source untouched. Convert a runtime copy to GGUF Q4_K_M on the server. Do not commit model weights to the repository."
+}
